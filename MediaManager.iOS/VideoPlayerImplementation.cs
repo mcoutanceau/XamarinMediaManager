@@ -217,25 +217,62 @@ namespace Plugin.MediaManager
                 return;
             }
 
-            try
-            {
-                // Start off with the status LOADING.
-                Status = MediaPlayerStatus.Buffering;
+			try
+			{
+				var nsDuration = new NSString("duration");
+				Status = MediaPlayerStatus.Buffering;
+				NSError localNsError;
+				bool insertTimeRangeResult;
 
-                var nsAsset = AVAsset.FromUrl(nsUrl);
-                var streamingItem = AVPlayerItem.FromAsset(nsAsset);
+				//http://stackoverflow.com/questions/11525342/subtitles-for-avplayer-mpmovieplayercontroller
 
-                Player.CurrentItem?.RemoveObserver(this, new NSString("status"));
+				//// 1 - Load video asset
+				//AVAsset *videoAsset = [AVURLAsset assetWithURL:[[NSBundle mainBundle] URLForResource:@"video" withExtension:@"mp4"]];
+				AVAsset videoAsset = AVAsset.FromUrl(nsUrl);
+				CMTimeRange videoRange;
+				{
+					//S'assurer que la durée est bien chargée.
+					CMTime vidDuration = CMTime.Indefinite;
+					using (var observer = videoAsset.AddObserver(nsDuration, NSKeyValueObservingOptions.Initial | NSKeyValueObservingOptions.New, durationChanged => vidDuration = videoAsset.Duration))
+						await videoAsset.LoadValuesTaskAsync(new string[] { nsDuration });
+					videoRange = new CMTimeRange { Duration = vidDuration, Start = CMTime.Zero };
+				}
 
-                Player.ReplaceCurrentItemWithPlayerItem(streamingItem);
-                streamingItem.AddObserver(this, new NSString("status"), NSKeyValueObservingOptions.New, Player.Handle);
-                streamingItem.AddObserver(this, new NSString("loadedTimeRanges"),
-                    NSKeyValueObservingOptions.Initial | NSKeyValueObservingOptions.New, Player.Handle);
+				//// 2 - Create AVMutableComposition object. This object will hold your AVMutableCompositionTrack instances.
+				//AVMutableComposition *mixComposition = [[AVMutableComposition alloc] init];
+				AVMutableComposition mutableComposition = new AVMutableComposition();
 
-                Player.CurrentItem.SeekingWaitsForVideoCompositionRendering = true;
-                Player.CurrentItem.AddObserver(this, (NSString)"status", NSKeyValueObservingOptions.New |
-                                                                          NSKeyValueObservingOptions.Initial,
-                    StatusObservationContext.Handle);
+				//// 3 - Video track
+				//AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+				//[videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration)
+				//                    ofTrack:[[videoAsset tracksWithMediaType:AVMediaTypeVideo] objectAtIndex:0] atTime:kCMTimeZero error:nil];
+				insertTimeRangeResult = mutableComposition.Insert(videoRange, videoAsset, CMTime.Zero, out localNsError);
+
+				//// 4 - Subtitle track
+				//AVURLAsset *subtitleAsset = [AVURLAsset assetWithURL:[[NSBundle mainBundle] URLForResource:@"subtitles" withExtension:@"vtt"]];
+				//AVMutableCompositionTrack *subtitleTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeText preferredTrackID:kCMPersistentTrackID_Invalid];
+				//[subtitleTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:[[subtitleAsset tracksWithMediaType:AVMediaTypeText] objectAtIndex:0] atTime:kCMTimeZero error:nil];
+				AVAsset subtitleAsset = AVAsset.FromUrl(new NSUrl("https://vimeo.com/texttrack/2815046.vtt?token=5919da60_0x893bd800e2a6dfb97d7b880d481e3721fd79caf6"));
+				insertTimeRangeResult = mutableComposition.Insert(videoRange, subtitleAsset, CMTime.Zero, out localNsError);
+
+				//// 5 - Set up player
+				//AVPlayer *player = [AVPlayer playerWithPlayerItem: [AVPlayerItem playerItemWithAsset:mixComposition]];
+				AVPlayerItem vidItem = AVPlayerItem.FromAsset(mutableComposition);
+
+				this.Player.CurrentItem?.RemoveObserver(this, new NSString("status"));
+                this.Player.ReplaceCurrentItemWithPlayerItem(vidItem);
+
+                vidItem.AddObserver(this, new NSString("status"), NSKeyValueObservingOptions.New, Player.Handle);
+				//vidItem.AddObserver(this, new NSString("loadedTimeRanges"), NSKeyValueObservingOptions.Initial | NSKeyValueObservingOptions.New, Player.Handle);
+				using (var observer = vidItem.AddObserver(new NSString("loadedTimeRanges"), NSKeyValueObservingOptions.Initial | NSKeyValueObservingOptions.New,
+					loadedTimeRangesChanged => this.UpdatedLoadedTimeRanges(vidItem.LoadedTimeRanges)))
+				{
+					await Task.Delay(2000);//TODO:mco, trouve le moyen d'attendre de manière fiable.
+					//await vidItem. LoadValuesTaskAsync(new string[] { nsDuration });
+				}
+
+				this.Player.CurrentItem.SeekingWaitsForVideoCompositionRendering = true;
+                this.Player.CurrentItem.AddObserver(this, (NSString)"status", NSKeyValueObservingOptions.New | NSKeyValueObservingOptions.Initial, StatusObservationContext.Handle);
 
                 NSNotificationCenter.DefaultCenter.AddObserver(AVPlayerItem.DidPlayToEndTimeNotification,
                                                                notification => MediaFinished?.Invoke(this, new MediaFinishedEventArgs(mediaFile)), Player.CurrentItem);
@@ -253,6 +290,7 @@ namespace Plugin.MediaManager
 
             await Task.CompletedTask;
         }
+
 
         public override void ObserveValue(NSString keyPath, NSObject ofObject, NSDictionary change, IntPtr context)
         {
@@ -301,23 +339,27 @@ namespace Plugin.MediaManager
 
         private void ObserveLoadedTimeRanges()
         {
-            var loadedTimeRanges = _player.CurrentItem.LoadedTimeRanges;
-            if (loadedTimeRanges.Length > 0)
-            {
-                var range = loadedTimeRanges[0].CMTimeRangeValue;
-                var duration = double.IsNaN(range.Duration.Seconds) ? TimeSpan.Zero : TimeSpan.FromSeconds(range.Duration.Seconds);
-                var totalDuration = _player.CurrentItem.Duration;
-                var bufferProgress = duration.TotalSeconds / totalDuration.Seconds;
-                BufferingChanged?.Invoke(this, new BufferingChangedEventArgs(
-                    !double.IsInfinity(bufferProgress) ? bufferProgress : 0,
-                    duration
-                ));
-            }
-            else
-            {
-                BufferingChanged?.Invoke(this, new BufferingChangedEventArgs(0, TimeSpan.Zero));
-            }
+			this.UpdatedLoadedTimeRanges(_player.CurrentItem.LoadedTimeRanges);
+
         }
+		private void UpdatedLoadedTimeRanges(NSValue[] loadedTimeRanges)
+		{
+			if (loadedTimeRanges != null && loadedTimeRanges.Length > 0)
+			{
+				var range = loadedTimeRanges[0].CMTimeRangeValue;
+				var duration = double.IsNaN(range.Duration.Seconds) ? TimeSpan.Zero : TimeSpan.FromSeconds(range.Duration.Seconds);
+				var totalDuration = _player.CurrentItem.Duration;
+				var bufferProgress = duration.TotalSeconds / totalDuration.Seconds;
+				BufferingChanged?.Invoke(this, new BufferingChangedEventArgs(
+					!double.IsInfinity(bufferProgress) ? bufferProgress : 0,
+					duration
+				));
+			}
+			else
+			{
+				BufferingChanged?.Invoke(this, new BufferingChangedEventArgs(0, TimeSpan.Zero));
+			}
+		}
 
         private IVideoSurface _renderSurface;
         public IVideoSurface RenderSurface

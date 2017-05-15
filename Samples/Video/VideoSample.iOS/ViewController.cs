@@ -32,9 +32,20 @@ namespace MediaSample.iOS
 
         partial void PlayButton_TouchUpInside(UIButton sender)
         {
-            var video = new MediaFile() {
-                Url = "http://clips.vorwaerts-gmbh.de/big_buck_bunny.mp4",
-                Type = MediaFileType.Video
+			//	Videos
+
+			//270p: https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609692.mp4?expires=1494851227&token=05e93dd1c79575c6a4ed1
+			//720p: https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609691.mp4?expires=1494851227&token=00c65ae10f7f5754ecf74
+			//360p: https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609677.mp4?expires=1494851227&token=0dcec5787ed6386c9e8f8
+			//Subtitles
+			//		en : https://vimeo.com/texttrack/2815054.vtt?token=59199d6f_0x817c6771b8c8d6b133dca1b8c6d246260c70797f
+			//es: https://vimeo.com/texttrack/2815057.vtt?token=59199d6f_0xb9f1cb9865e7c2a605ec6ac23e7902aa7197f989
+			//fr: https://vimeo.com/texttrack/2815046.vtt?token=59199d6f_0x79ee6450b749fa3ec3d282eed071752141dd43a8
+
+
+			var video = new MediaFile() {
+                Url = "https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609692.mp4?expires=1494866828&token=0de5626d0a2e3ecef8ac7",
+				Type = MediaFileType.Video,
             };
             CrossMediaManager.Current.Play(video);
         }

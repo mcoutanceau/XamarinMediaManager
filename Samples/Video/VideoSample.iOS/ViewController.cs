@@ -44,7 +44,7 @@ namespace MediaSample.iOS
 
 
 			var video = new MediaFile() {
-                Url = "https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609692.mp4?expires=1494866828&token=0de5626d0a2e3ecef8ac7",
+                Url = "https://12-lvl3-pdl.vimeocdn.com/01/4788/4/123942907/352609692.mp4?expires=1494868193&token=099622a901a57ad812d77",
 				Type = MediaFileType.Video,
             };
             CrossMediaManager.Current.Play(video);

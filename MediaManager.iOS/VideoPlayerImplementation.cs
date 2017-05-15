@@ -237,23 +237,15 @@ namespace Plugin.MediaManager
 						await videoAsset.LoadValuesTaskAsync(new string[] { nsDuration });
 					videoRange = new CMTimeRange { Duration = vidDuration, Start = CMTime.Zero };
 				}
-
-				//// 2 - Create AVMutableComposition object. This object will hold your AVMutableCompositionTrack instances.
-				//AVMutableComposition *mixComposition = [[AVMutableComposition alloc] init];
+				//http://blog.csdn.net/yiyunhzy/article/details/10398471
+				
 				AVMutableComposition mutableComposition = new AVMutableComposition();
+				AVAsset subtitleAsset = AVAsset.FromUrl(new NSUrl("https://vimeo.com/texttrack/2815054.vtt?token=5919dfb5_0xd9fa4f49fc99cc6d888257728566d4a1dd86d8d6"));
+				var videoCompositionTrack = mutableComposition.AddMutableTrack(AVMediaType.Video, mutableComposition.UnusedTrackId);
+				var subCompositionTrack = mutableComposition.AddMutableTrack(AVMediaType.Text, mutableComposition.UnusedTrackId);
+				insertTimeRangeResult = videoCompositionTrack.InsertTimeRange(videoRange, videoAsset.TracksWithMediaType(AVMediaType.Video).First(), CMTime.Zero, out localNsError);
+				insertTimeRangeResult = subCompositionTrack.InsertTimeRange(videoRange, subtitleAsset.TracksWithMediaType(AVMediaType.Text).First(), CMTime.Zero, out localNsError);
 
-				//// 3 - Video track
-				//AVMutableCompositionTrack *videoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-				//[videoTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration)
-				//                    ofTrack:[[videoAsset tracksWithMediaType:AVMediaTypeVideo] objectAtIndex:0] atTime:kCMTimeZero error:nil];
-				insertTimeRangeResult = mutableComposition.Insert(videoRange, videoAsset, CMTime.Zero, out localNsError);
-
-				//// 4 - Subtitle track
-				//AVURLAsset *subtitleAsset = [AVURLAsset assetWithURL:[[NSBundle mainBundle] URLForResource:@"subtitles" withExtension:@"vtt"]];
-				//AVMutableCompositionTrack *subtitleTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeText preferredTrackID:kCMPersistentTrackID_Invalid];
-				//[subtitleTrack insertTimeRange:CMTimeRangeMake(kCMTimeZero, videoAsset.duration) ofTrack:[[subtitleAsset tracksWithMediaType:AVMediaTypeText] objectAtIndex:0] atTime:kCMTimeZero error:nil];
-				AVAsset subtitleAsset = AVAsset.FromUrl(new NSUrl("https://vimeo.com/texttrack/2815046.vtt?token=5919da60_0x893bd800e2a6dfb97d7b880d481e3721fd79caf6"));
-				insertTimeRangeResult = mutableComposition.Insert(videoRange, subtitleAsset, CMTime.Zero, out localNsError);
 
 				//// 5 - Set up player
 				//AVPlayer *player = [AVPlayer playerWithPlayerItem: [AVPlayerItem playerItemWithAsset:mixComposition]];
